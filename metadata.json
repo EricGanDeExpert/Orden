@@ -1,0 +1,7 @@
+{
+  "name": "Orden",
+  "description": "An iPad-style AI-powered study companion with organized folders, smart transcripts, and voice-enabled note taking.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
