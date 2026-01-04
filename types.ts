@@ -1,8 +1,22 @@
 
 export enum View {
+  LOGIN = 'login',
+  SIGNUP = 'signup',
   CHAT = 'chat',
   NOTES = 'notes',
   PROFILE = 'profile',
+  GENERAL_SETTINGS = 'general_settings',
+}
+
+export interface User {
+  id: string;
+  email: string;
+  username: string;
+  avatarUrl: string;
+  plan: string;
+  credits: number;
+  maxCredits: number;
+  createdAt: string;
 }
 
 export interface Message {
