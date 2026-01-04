@@ -1,30 +1,35 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Message, Folder } from '../types';
+import { Message } from '../types';
 import { getGeminiResponse } from '../services/geminiService';
+import { getFolders } from '../services/notesService';
 
 const INITIAL_MESSAGES: Message[] = [
   {
     id: '1',
     role: 'assistant',
-    content: "Hi Alex! I'm ready. I see you're working in Biology 101. Are we recording a lecture or reviewing notes?",
+    content: "Hi! I'm ready to help you study. Select a folder above to view your notes, or ask me any questions about your subjects!",
     timestamp: '9:41 AM'
   }
 ];
 
-const FOLDERS: Folder[] = [
-  { id: '1', name: 'Biology 101', icon: 'biotech' },
-  { id: '2', name: 'Calc II', icon: 'functions' },
-  { id: '3', name: 'World History', icon: 'history_edu' },
-  { id: '4', name: 'CS 50', icon: 'code' },
-];
+interface ChatViewProps {
+  selectedFolderId: string;
+  onFolderSelect: (folderId: string) => void;
+}
 
-const ChatView: React.FC = () => {
+const ChatView: React.FC<ChatViewProps> = ({ selectedFolderId, onFolderSelect }) => {
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
-  const [activeFolderId, setActiveFolderId] = useState('1');
+  const [activeFolderId, setActiveFolderId] = useState(selectedFolderId);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const folders = getFolders();
+
+  useEffect(() => {
+    setActiveFolderId(selectedFolderId);
+  }, [selectedFolderId]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -52,7 +57,7 @@ const ChatView: React.FC = () => {
     }));
 
     const aiResponse = await getGeminiResponse(inputValue, history);
-    
+
     setIsTyping(false);
     setMessages(prev => [...prev, {
       id: (Date.now() + 1).toString(),
@@ -62,23 +67,29 @@ const ChatView: React.FC = () => {
     }]);
   };
 
+  const handleFolderClick = (folderId: string) => {
+    setActiveFolderId(folderId);
+    onFolderSelect(folderId);
+  };
+
   return (
     <div className="flex flex-col h-full bg-background-dark font-display">
       {/* Header */}
       <header className="flex items-center px-8 pt-10 pb-6 justify-between sticky top-0 bg-background-dark/80 backdrop-blur-md z-20">
         <div className="flex items-center gap-4">
-          <div 
-            className="size-12 rounded-full bg-center bg-cover ring-2 ring-primary/20 shadow-lg"
-            style={{ backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuBsme7JE3gaN2f3gJdOdg74xGRsRmzWs3Yp_rTwKGG0JHsBd-XTG6nqg6CQpoDTFjoKvpNA7-x18Xjqk6SVgUCO6fiAXoe1FBoQqMewEVSJjai56VxNNcFNNhCnLMT4pbX2KDFei5Plu35htqyktd8UZYsI9u2U_HTLYpphj70IaRZf0J0FDf49VqbViGDmnBFEDYmozT1zNujgolmVKxUzgd_0ckpvc8eEAx6UaTBHosQC6OkOaBvUEGu8VWJq04-pLfpHRL_xUNA")' }}
-          />
+          <div
+            className="size-12 rounded-full bg-gradient-to-tr from-primary to-blue-400 flex items-center justify-center ring-2 ring-primary/20 shadow-lg"
+          >
+            <span className="material-symbols-outlined text-white text-2xl">school</span>
+          </div>
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <p className="text-xl font-bold leading-none text-white">Alex</p>
-              <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded uppercase tracking-wider">Pro</span>
+              <p className="text-xl font-bold leading-none text-white">Orden AI</p>
+              <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded uppercase tracking-wider">Study</span>
             </div>
             <div className="flex items-center gap-1.5 text-text-secondary-dark">
-              <span className="material-symbols-outlined text-sm">school</span>
-              <p className="text-sm font-medium">Stanford University</p>
+              <span className="material-symbols-outlined text-sm">auto_awesome</span>
+              <p className="text-sm font-medium">Your AI Study Companion</p>
             </div>
           </div>
         </div>
@@ -94,25 +105,28 @@ const ChatView: React.FC = () => {
 
       {/* Tab Pills Section - Folders */}
       <div className="px-8 pb-4 border-b border-slate-800/30">
+        <p className="text-[11px] font-bold text-text-secondary-dark uppercase tracking-[0.2em] mb-3 px-1">Your Folders</p>
         <div className="flex gap-3 overflow-x-auto no-scrollbar py-1">
-          {FOLDERS.map((folder) => (
+          {folders.map((folder) => (
             <button
               key={folder.id}
-              onClick={() => setActiveFolderId(folder.id)}
-              className={`flex h-10 shrink-0 items-center justify-center gap-x-2 px-5 rounded-full transition-all duration-200 border ${
+              onClick={() => handleFolderClick(folder.id)}
+              className={`flex h-12 shrink-0 items-center justify-center gap-x-2 px-5 rounded-2xl transition-all duration-200 border ${
                 activeFolderId === folder.id
                   ? 'bg-white text-background-dark font-bold shadow-lg border-white'
-                  : 'bg-[#232f48] text-slate-400 border-slate-700/50 hover:text-slate-200 font-medium'
+                  : 'bg-[#232f48] text-slate-400 border-slate-700/50 hover:text-slate-200 hover:border-slate-600 font-medium'
               }`}
             >
               <span className={`material-symbols-outlined text-lg ${activeFolderId === folder.id ? 'text-primary' : 'text-slate-500'}`}>
                 {folder.icon}
               </span>
               <span className="text-sm whitespace-nowrap">{folder.name}</span>
+              <span className="material-symbols-outlined text-lg ml-1">chevron_right</span>
             </button>
           ))}
-          <button className="flex h-10 shrink-0 items-center justify-center size-10 rounded-full bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors">
+          <button className="flex h-12 shrink-0 items-center justify-center px-4 rounded-2xl bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors gap-2">
             <span className="material-symbols-outlined text-xl">add</span>
+            <span className="text-sm font-medium">New Folder</span>
           </button>
         </div>
       </div>
@@ -126,8 +140,8 @@ const ChatView: React.FC = () => {
         </div>
 
         {messages.map((msg) => (
-          <div 
-            key={msg.id} 
+          <div
+            key={msg.id}
             className={`flex items-start gap-3 animate-fade-in ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
           >
             {msg.role === 'assistant' && (
@@ -170,7 +184,7 @@ const ChatView: React.FC = () => {
               Recording...
             </p>
           </div>
-          
+
           <div className="flex items-center justify-between gap-6">
             <button className="flex flex-col items-center group w-16 transition-transform active:scale-95">
               <div className="size-14 rounded-full bg-surface-dark border border-slate-800 shadow-sm flex items-center justify-center text-slate-300 group-hover:text-primary transition-all">
@@ -180,7 +194,7 @@ const ChatView: React.FC = () => {
             </button>
 
             <div className="relative flex-1 flex justify-center">
-              <button 
+              <button
                 onClick={handleSendMessage}
                 disabled={isTyping}
                 className={`relative size-28 rounded-full shadow-2xl flex items-center justify-center transition-all hover:scale-105 active:scale-95 group mx-2 ${isTyping ? 'bg-slate-700 opacity-50' : 'bg-primary shadow-primary/40'}`}
@@ -189,10 +203,10 @@ const ChatView: React.FC = () => {
                 <span className="absolute -inset-3 rounded-full border border-primary/10 group-hover:border-primary/20 transition-colors"></span>
                 <span className="material-symbols-outlined text-white text-5xl group-hover:scale-110 transition-transform">mic</span>
               </button>
-              
+
               <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 pointer-events-none opacity-0 focus-within:opacity-100 transition-opacity">
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}

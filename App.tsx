@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, User } from './types';
+import { View, User, Note } from './types';
 import Layout from './components/Layout';
 import ChatView from './views/ChatView';
 import FolderView from './views/FolderView';
@@ -7,6 +7,7 @@ import ProfileView from './views/ProfileView';
 import LoginView from './views/LoginView';
 import SignupView from './views/SignupView';
 import GeneralSettingsView from './views/GeneralSettingsView';
+import NoteDetailView from './views/NoteDetailView';
 import * as authService from './services/authService';
 
 const App: React.FC = () => {
@@ -15,6 +16,9 @@ const App: React.FC = () => {
   const [authError, setAuthError] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [selectedFolderId, setSelectedFolderId] = useState<string>('biology');
+  const [selectedNote, setSelectedNote] = useState<Note | null>(null);
+  const [customNotes, setCustomNotes] = useState<Record<string, Note[]>>({});
 
   // Check for existing session on mount
   useEffect(() => {
@@ -89,6 +93,50 @@ const App: React.FC = () => {
     return { success: response.success, error: response.error };
   };
 
+  // Handle folder selection and navigate to notes
+  const handleFolderSelect = (folderId: string) => {
+    setSelectedFolderId(folderId);
+    setActiveView(View.NOTES);
+  };
+
+  // Handle note selection and navigate to note detail
+  const handleNoteSelect = (note: Note) => {
+    setSelectedNote(note);
+    setActiveView(View.NOTE_DETAIL);
+  };
+
+  // Handle adding a new note
+  const handleAddNote = (note: Note) => {
+    setCustomNotes(prev => ({
+      ...prev,
+      [selectedFolderId]: [...(prev[selectedFolderId] || []), note]
+    }));
+  };
+
+  // Handle updating a note
+  const handleUpdateNote = (updatedNote: Note) => {
+    setSelectedNote(updatedNote);
+    // Update in custom notes if it exists there
+    setCustomNotes(prev => {
+      const folderNotes = prev[selectedFolderId] || [];
+      const noteIndex = folderNotes.findIndex(n => n.id === updatedNote.id);
+      if (noteIndex !== -1) {
+        const newNotes = [...folderNotes];
+        newNotes[noteIndex] = updatedNote;
+        return { ...prev, [selectedFolderId]: newNotes };
+      }
+      return prev;
+    });
+  };
+
+  // Handle deleting a note
+  const handleDeleteNote = (noteId: string) => {
+    setCustomNotes(prev => ({
+      ...prev,
+      [selectedFolderId]: (prev[selectedFolderId] || []).filter(n => n.id !== noteId)
+    }));
+  };
+
   // Show loading state while checking auth
   if (isCheckingAuth) {
     return (
@@ -158,13 +206,36 @@ const App: React.FC = () => {
     );
   }
 
+  // Note Detail view (no bottom nav, has back button)
+  if (activeView === View.NOTE_DETAIL && selectedNote) {
+    return (
+      <div className="flex justify-center bg-black min-h-screen">
+        <div className="relative w-full max-w-4xl bg-background-dark overflow-hidden flex flex-col h-screen md:rounded-[40px] md:my-8 md:shadow-2xl md:border-[12px] border-slate-900">
+          <NoteDetailView
+            note={selectedNote}
+            onBack={() => setActiveView(View.NOTES)}
+            onUpdateNote={handleUpdateNote}
+            onDeleteNote={handleDeleteNote}
+          />
+        </div>
+      </div>
+    );
+  }
+
   // Main app views (with bottom nav)
   const renderView = () => {
     switch (activeView) {
       case View.CHAT:
-        return <ChatView />;
+        return <ChatView selectedFolderId={selectedFolderId} onFolderSelect={handleFolderSelect} />;
       case View.NOTES:
-        return <FolderView />;
+        return (
+          <FolderView
+            folderId={selectedFolderId}
+            onBack={() => setActiveView(View.CHAT)}
+            onNoteSelect={handleNoteSelect}
+            onAddNote={handleAddNote}
+          />
+        );
       case View.PROFILE:
         if (user) {
           return (
@@ -176,9 +247,9 @@ const App: React.FC = () => {
             />
           );
         }
-        return <ChatView />;
+        return <ChatView selectedFolderId={selectedFolderId} onFolderSelect={handleFolderSelect} />;
       default:
-        return <ChatView />;
+        return <ChatView selectedFolderId={selectedFolderId} onFolderSelect={handleFolderSelect} />;
     }
   };
 

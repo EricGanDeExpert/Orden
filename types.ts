@@ -4,6 +4,7 @@ export enum View {
   SIGNUP = 'signup',
   CHAT = 'chat',
   NOTES = 'notes',
+  NOTE_DETAIL = 'note_detail',
   PROFILE = 'profile',
   GENERAL_SETTINGS = 'general_settings',
 }
