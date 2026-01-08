@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Note } from '../types';
 import { getNotesByFolder, getFolderById, getNoteCount } from '../services/notesService';
 
@@ -18,10 +18,22 @@ const FolderView: React.FC<FolderViewProps> = ({ folderId, onBack, onNoteSelect,
   const [newNoteType, setNewNoteType] = useState<Note['type']>('article');
   const [newNoteContent, setNewNoteContent] = useState('');
   const [showNoteMenu, setShowNoteMenu] = useState<string | null>(null);
+  const [allNotes, setAllNotes] = useState<Note[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const folder = getFolderById(folderId);
-  const allNotes = getNotesByFolder(folderId);
   const noteCount = getNoteCount(folderId);
+
+  // Load notes when component mounts or folderId changes
+  useEffect(() => {
+    const loadNotes = async () => {
+      setIsLoading(true);
+      const notes = await getNotesByFolder(folderId);
+      setAllNotes(notes);
+      setIsLoading(false);
+    };
+    loadNotes();
+  }, [folderId]);
 
   const tabs = [
     { name: 'All', icon: 'apps' },
@@ -47,7 +59,9 @@ const FolderView: React.FC<FolderViewProps> = ({ folderId, onBack, onNoteSelect,
     const matchesSearch = searchQuery === '' ||
       note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       note.subtitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      note.content?.toLowerCase().includes(searchQuery.toLowerCase());
+      note.preview?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      note.content?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      note.tags?.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
 
     return matchesTab && matchesSearch;
   });
@@ -168,7 +182,12 @@ const FolderView: React.FC<FolderViewProps> = ({ folderId, onBack, onNoteSelect,
 
       {/* Note Cards List */}
       <div className="flex flex-col gap-4 p-6 pb-40">
-        {filteredNotes.length === 0 ? (
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-16">
+            <span className="material-symbols-outlined text-primary text-5xl animate-spin mb-4">progress_activity</span>
+            <p className="text-slate-400 font-medium">Loading notes...</p>
+          </div>
+        ) : filteredNotes.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="size-20 rounded-full bg-slate-800/50 flex items-center justify-center mb-4">
               <span className="material-symbols-outlined text-4xl text-slate-600">
@@ -270,8 +289,8 @@ const FolderView: React.FC<FolderViewProps> = ({ folderId, onBack, onNoteSelect,
               </div>
 
               <div className="pl-16">
-                {note.content && (
-                  <p className="text-sm text-slate-300 leading-relaxed line-clamp-2">{note.content}</p>
+                {note.preview && (
+                  <p className="text-sm text-slate-300 leading-relaxed line-clamp-2">{note.preview}</p>
                 )}
                 {note.image && (
                   <div className="rounded-2xl overflow-hidden h-32 w-full max-w-sm mb-2 border border-slate-800">

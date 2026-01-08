@@ -45,6 +45,7 @@ export interface Note {
   title: string;
   subtitle: string;
   content?: string;
+  preview?: string; // Clean preview text for display in folder view
   date: string;
   tags?: string[];
   image?: string;

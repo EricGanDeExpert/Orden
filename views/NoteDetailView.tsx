@@ -1,6 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Note } from '../types';
+import MarkdownRenderer from '../components/MarkdownRenderer';
+import { saveNoteEdit } from '../services/noteEditService';
 
 interface NoteDetailViewProps {
   note: Note;
@@ -17,19 +19,55 @@ const NoteDetailView: React.FC<NoteDetailViewProps> = ({ note, onBack, onUpdateN
   const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   // For task notes, manage checkbox states
-  const [taskItems, setTaskItems] = useState(note.progress?.items || []);
+  const [taskItems, setTaskItems] = useState<{ label: string; done: boolean }[]>([]);
+
+  // Extract tasks from markdown content for task notes
+  useEffect(() => {
+    if (note.type === 'tasks' && note.content) {
+      const taskRegex = /^[-*]\s+\[([x\s])\]\s+(.+)$/gm;
+      const tasks: { label: string; done: boolean }[] = [];
+      let match: RegExpExecArray | null;
+
+      while ((match = taskRegex.exec(note.content)) !== null) {
+        tasks.push({
+          done: match[1].toLowerCase() === 'x',
+          label: match[2].trim(),
+        });
+      }
+
+      setTaskItems(tasks);
+    } else if (note.progress?.items) {
+      setTaskItems(note.progress.items);
+    }
+  }, [note]);
 
   const handleSave = () => {
+    // Update markdown content with edited tasks if it's a task note
+    let finalContent = editedContent;
+    if (note.type === 'tasks' && taskItems.length > 0) {
+      // Update task checkboxes in content
+      finalContent = editedContent.replace(/^([-*]\s+)\[([x\s])\](\s+.+)$/gm, (match, prefix, checkbox, rest) => {
+        const taskIndex = taskItems.findIndex(t => rest.trim().includes(t.label));
+        if (taskIndex !== -1) {
+          return `${prefix}[${taskItems[taskIndex].done ? 'x' : ' '}]${rest}`;
+        }
+        return match;
+      });
+    }
+
     const updatedNote: Note = {
       ...note,
       title: editedTitle,
-      content: editedContent,
+      content: finalContent,
       progress: note.progress ? {
         ...note.progress,
         items: taskItems,
         completed: taskItems.filter(item => item.done).length
       } : undefined
     };
+
+    // Save to localStorage
+    saveNoteEdit(updatedNote);
     onUpdateNote(updatedNote);
     setIsEditing(false);
   };
@@ -39,15 +77,30 @@ const NoteDetailView: React.FC<NoteDetailViewProps> = ({ note, onBack, onUpdateN
     newItems[index] = { ...newItems[index], done: !newItems[index].done };
     setTaskItems(newItems);
 
+    // Update markdown content with new checkbox state
+    let updatedContent = note.content || '';
+    const taskLabel = newItems[index].label;
+    const newCheckState = newItems[index].done ? 'x' : ' ';
+
+    // Find and update the specific task in markdown
+    updatedContent = updatedContent.replace(
+      new RegExp(`([-*]\\s+\\[)[x\\s](\\]\\s+${taskLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'm'),
+      `$1${newCheckState}$2`
+    );
+
     // Auto-save task changes
     const updatedNote: Note = {
       ...note,
+      content: updatedContent,
       progress: {
         ...note.progress!,
         items: newItems,
         completed: newItems.filter(item => item.done).length
       }
     };
+
+    // Save to localStorage
+    saveNoteEdit(updatedNote);
     onUpdateNote(updatedNote);
   };
 
@@ -293,7 +346,11 @@ const NoteDetailView: React.FC<NoteDetailViewProps> = ({ note, onBack, onUpdateN
                 placeholder="Write your note content..."
               />
             ) : (
-              <p className="text-slate-300 leading-relaxed whitespace-pre-wrap text-base">{note.content || 'No content yet. Click edit to add content.'}</p>
+              note.content ? (
+                <MarkdownRenderer content={note.content} />
+              ) : (
+                <p className="text-slate-300 leading-relaxed text-base">No content yet. Click edit to add content.</p>
+              )
             )}
           </div>
         )}

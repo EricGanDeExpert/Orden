@@ -9,6 +9,7 @@ import SignupView from './views/SignupView';
 import GeneralSettingsView from './views/GeneralSettingsView';
 import NoteDetailView from './views/NoteDetailView';
 import * as authService from './services/authService';
+import { invalidateFolderCache } from './services/notesService';
 
 const App: React.FC = () => {
   const [activeView, setActiveView] = useState<View>(View.LOGIN);
@@ -19,6 +20,7 @@ const App: React.FC = () => {
   const [selectedFolderId, setSelectedFolderId] = useState<string>('biology');
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [customNotes, setCustomNotes] = useState<Record<string, Note[]>>({});
+  const [refreshFolderKey, setRefreshFolderKey] = useState(0); // Force FolderView to reload
 
   // Check for existing session on mount
   useEffect(() => {
@@ -116,6 +118,10 @@ const App: React.FC = () => {
   // Handle updating a note
   const handleUpdateNote = (updatedNote: Note) => {
     setSelectedNote(updatedNote);
+    // Invalidate cache so folder view reloads with updated note
+    invalidateFolderCache(selectedFolderId);
+    // Force FolderView to reload with updated data
+    setRefreshFolderKey(prev => prev + 1);
     // Update in custom notes if it exists there
     setCustomNotes(prev => {
       const folderNotes = prev[selectedFolderId] || [];
@@ -230,6 +236,7 @@ const App: React.FC = () => {
       case View.NOTES:
         return (
           <FolderView
+            key={refreshFolderKey}
             folderId={selectedFolderId}
             onBack={() => setActiveView(View.CHAT)}
             onNoteSelect={handleNoteSelect}
