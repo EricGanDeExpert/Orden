@@ -1,8 +1,10 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import 'dotenv/config';
 import { initDatabase } from './database';
 import * as auth from './auth';
 import * as notes from './notes';
+import { processAgentCommand, parseSimpleCommand, executeQuickCommand } from './agent/agentService';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -247,6 +249,52 @@ app.delete('/api/notes/custom/:noteId', authenticate, (req, res) => {
     console.error('Delete custom note error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
+});
+
+// Agent endpoint - Process natural language commands for note management
+app.post('/api/agent/command', authenticate, async (req, res) => {
+  try {
+    const userId = (req as any).userId;
+    const { command, conversationHistory } = req.body;
+
+    if (!command) {
+      return res.status(400).json({ error: 'Command is required' });
+    }
+
+    // Check if this is a simple command that can be handled without Claude API
+    const simpleCommand = parseSimpleCommand(command);
+    if (simpleCommand) {
+      const result = await executeQuickCommand(simpleCommand.action, simpleCommand.params, userId);
+      return res.json(result);
+    }
+
+    // Process complex command with Claude agent
+    const result = await processAgentCommand({
+      command,
+      userId,
+      conversationHistory,
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('Agent command error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to process agent command',
+      error: (error as Error).message,
+    });
+  }
+});
+
+// Agent health check
+app.get('/api/agent/status', (req, res) => {
+  const hasApiKey = !!process.env.ANTHROPIC_API_KEY;
+  res.json({
+    status: hasApiKey ? 'ready' : 'not_configured',
+    message: hasApiKey
+      ? 'Notes agent is ready to process commands'
+      : 'ANTHROPIC_API_KEY is not configured',
+  });
 });
 
 // Start server
