@@ -23,7 +23,11 @@ const ChatView: React.FC<ChatViewProps> = ({ selectedFolderId, onFolderSelect })
   const [activeFolderId, setActiveFolderId] = useState(selectedFolderId);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   const folders = getFolders();
 
@@ -39,11 +43,93 @@ const ChatView: React.FC<ChatViewProps> = ({ selectedFolderId, onFolderSelect })
 
   const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
+    // ... rest of the function remains same but I'll replace the whole block to be safe with indentation
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        await handleTranscription(audioBlob);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      alert('Could not access microphone. Please check permissions.');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const toggleRecording = () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  };
+
+  const handleTranscription = async (audioBlob: Blob) => {
+    setIsTranscribing(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', audioBlob, 'recording.webm');
+
+      const response = await fetch('http://localhost:3001/api/transcribe', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Transcription failed');
+      }
+
+      const data = await response.json();
+      const transcribedText = data.text;
+
+      console.log('Transcribed Text:', transcribedText);
+      setInputValue(transcribedText);
+
+      // Automatically send if there's transcribed text
+      if (transcribedText.trim()) {
+        // We'll update inputValue and then wait for state update,
+        // but it's better to just pass it to a function that handles sending.
+        // I'll call handleSendMessage with the text directly.
+        await sendDirectMessage(transcribedText);
+      }
+    } catch (error) {
+      console.error('Transcription error:', error);
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
+  const sendDirectMessage = async (text: string) => {
+    if (!text.trim()) return;
 
     const userMsg: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: inputValue,
+      content: text,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
@@ -56,7 +142,7 @@ const ChatView: React.FC<ChatViewProps> = ({ selectedFolderId, onFolderSelect })
       parts: [{ text: m.content }]
     }));
 
-    const aiResponse = await getGeminiResponse(inputValue, history);
+    const aiResponse = await getGeminiResponse(text, history);
 
     setIsTyping(false);
     setMessages(prev => [...prev, {
@@ -174,15 +260,32 @@ const ChatView: React.FC<ChatViewProps> = ({ selectedFolderId, onFolderSelect })
 
       {/* Input Area */}
       <div className="fixed bottom-[110px] left-0 right-0 w-full max-w-4xl mx-auto z-40 px-6">
-        <div className="bg-background-dark/95 backdrop-blur-xl border border-slate-800/50 rounded-[40px] p-6 shadow-2xl">
-          <div className="flex items-center gap-4 mb-4">
-            <p className="text-slate-400 text-sm font-medium flex items-center gap-3 bg-slate-800/50 px-5 py-2 rounded-full">
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary"></span>
-              </span>
-              Recording...
-            </p>
+        <div className={`bg-background-dark/95 backdrop-blur-xl border border-slate-800/50 rounded-[40px] p-6 shadow-2xl transition-all duration-500 ${isRecording ? 'ring-2 ring-primary/30 bg-primary/5' : ''}`}>
+          <div className="flex items-center gap-4 mb-4 h-8">
+            {(isRecording || isTranscribing) && (
+              <p className="text-slate-400 text-sm font-medium flex items-center gap-3 bg-slate-800/50 px-5 py-2 rounded-full animate-fade-in">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isTranscribing ? 'bg-blue-400' : 'bg-primary'}`}></span>
+                  <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isTranscribing ? 'bg-blue-400' : 'bg-primary'}`}></span>
+                </span>
+                {isTranscribing ? 'Transcribing...' : 'Listening...'}
+              </p>
+            )}
+            {isRecording && (
+              <div className="flex gap-1 items-center px-2">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div
+                    key={i}
+                    className="w-1 bg-primary rounded-full animate-voice-bar"
+                    style={{
+                      height: '12px',
+                      animationDelay: `${i * 0.1}s`,
+                      animationDuration: '0.5s'
+                    }}
+                  ></div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center justify-between gap-6">
@@ -195,13 +298,24 @@ const ChatView: React.FC<ChatViewProps> = ({ selectedFolderId, onFolderSelect })
 
             <div className="relative flex-1 flex justify-center">
               <button
-                onClick={handleSendMessage}
-                disabled={isTyping}
-                className={`relative size-28 rounded-full shadow-2xl flex items-center justify-center transition-all hover:scale-105 active:scale-95 group mx-2 ${isTyping ? 'bg-slate-700 opacity-50' : 'bg-primary shadow-primary/40'}`}
+                onClick={toggleRecording}
+                disabled={isTyping || isTranscribing}
+                className={`relative size-28 rounded-full shadow-2xl flex items-center justify-center transition-all hover:scale-105 active:scale-95 group mx-2 ${
+                  isRecording
+                    ? 'bg-red-500 shadow-red-500/40 animate-pulse-slow'
+                    : (isTyping || isTranscribing) ? 'bg-slate-700 opacity-50' : 'bg-primary shadow-primary/40'
+                }`}
               >
-                <span className="absolute -inset-1.5 rounded-full border border-primary/20 group-hover:border-primary/40 transition-colors"></span>
-                <span className="absolute -inset-3 rounded-full border border-primary/10 group-hover:border-primary/20 transition-colors"></span>
-                <span className="material-symbols-outlined text-white text-5xl group-hover:scale-110 transition-transform">mic</span>
+                <span className={`absolute -inset-1.5 rounded-full border transition-colors ${isRecording ? 'border-red-500/20' : 'border-primary/20 group-hover:border-primary/40'}`}></span>
+                <span className={`absolute -inset-3 rounded-full border transition-colors ${isRecording ? 'border-red-500/10' : 'border-primary/10 group-hover:border-primary/20'}`}></span>
+                
+                {isRecording ? (
+                   <span className="material-symbols-outlined text-white text-5xl">stop</span>
+                ) : isTranscribing ? (
+                  <span className="material-symbols-outlined text-white text-5xl animate-spin">sync</span>
+                ) : (
+                  <span className="material-symbols-outlined text-white text-5xl group-hover:scale-110 transition-transform">mic</span>
+                )}
               </button>
 
               <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 pointer-events-none opacity-0 focus-within:opacity-100 transition-opacity">

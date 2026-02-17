@@ -5,9 +5,18 @@ import { initDatabase } from './database';
 import * as auth from './auth';
 import * as notes from './notes';
 import { processAgentCommand, parseSimpleCommand, executeQuickCommand } from './agent/agentService';
+import multer from 'multer';
+import OpenAI from 'openai';
+import fs from 'fs';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+const upload = multer({ dest: 'uploads/' });
 
 // Middleware
 app.use(cors());
@@ -295,6 +304,32 @@ app.get('/api/agent/status', (req, res) => {
       ? 'Notes agent is ready to process commands'
       : 'ANTHROPIC_API_KEY is not configured',
   });
+});
+
+// Transcription endpoint
+app.post('/api/transcribe', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No audio file provided' });
+    }
+
+    const transcription = await openai.audio.transcriptions.create({
+      file: fs.createReadStream(req.file.path),
+      model: 'whisper-1',
+    });
+
+    // Clean up temporary file
+    fs.unlinkSync(req.file.path);
+
+    console.log('Transcription result:', transcription.text);
+    res.json({ text: transcription.text });
+  } catch (error) {
+    console.error('Transcription error:', error);
+    if (req.file) {
+      fs.unlinkSync(req.file.path);
+    }
+    res.status(500).json({ error: 'Failed to transcribe audio', details: (error as any).message });
+  }
 });
 
 // Start server
